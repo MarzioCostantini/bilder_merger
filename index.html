@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bilder zusammenführen</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 20px;
+        }
+
+        canvas {
+            max-width: 100%;
+        }
+
+        img {
+            max-width: 100%;
+        }
+
+        #canvas-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        canvas {
+            border: 1px solid #ccc;
+            margin-top: 20px;
+        }
+
+        #controls {
+            margin-bottom: 20px;
+        }
+
+        button,
+        input {
+            margin: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Bilder zusammenführen</h1>
+    <div id="controls">
+        <input type="file" id="file-input" accept="image/*" multiple>
+        <button onclick="mergeImages()">Bilder zusammenführen</button>
+        <button onclick="downloadAllImages()">Alle Bilder herunterladen</button>
+    </div>
+    <div id="canvas-container"></div>
+    <script>
+        let imageFiles = [];
+        let fileNames = [];
+
+        // Bilder laden, wenn Dateien ausgewählt werden
+        document.getElementById('file-input').addEventListener('change', function (event) {
+            const files = Array.from(event.target.files);
+            imageFiles = files.map(file => {
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => resolve(img);
+                    img.onerror = () => reject(new Error('Bild konnte nicht geladen werden: ' + file.name));
+                    img.src = URL.createObjectURL(file);
+                    return img;
+                });
+            });
+            fileNames = files.map(file => file.name.split('.')[0]); // Speichert die Namen der Bilder ohne Erweiterung
+        });
+
+        async function mergeImages() {
+            const canvasContainer = document.getElementById('canvas-container');
+            canvasContainer.innerHTML = ''; // Vorherige Canvas löschen
+
+            const loadedImages = await Promise.all(imageFiles); // Warten bis alle Bilder geladen sind
+
+            for (let i = 0; i < loadedImages.length; i += 2) {
+                if (i + 1 < loadedImages.length) {
+                    const img1 = loadedImages[i];
+                    const img2 = loadedImages[i + 1];
+
+                    const canvas = document.createElement('canvas');
+                    canvasContainer.appendChild(canvas);
+
+                    drawPair(canvas, img1, img2);
+
+                    // Benenne das Canvas-Element nach dem ersten Bild des Paares
+                    canvas.setAttribute('data-filename', fileNames[i]);
+                }
+            }
+        }
+
+        function drawPair(canvas, img1, img2) {
+            const gap = 30;
+            const maxCanvasWidth = 2048;
+
+            // Berechne die Skalierung der Bilder, um die gleiche Höhe zu erreichen
+            const scaleFactor = Math.min(img1.height, img2.height) / Math.max(img1.height, img2.height);
+
+            let scaledImg1, scaledImg2;
+
+            // Skalieren der Bilder, um die gleiche Höhe zu erreichen
+            if (img1.height < img2.height) {
+                scaledImg1 = { width: img1.width, height: img1.height };
+                scaledImg2 = { width: img2.width * scaleFactor, height: img2.height * scaleFactor };
+            } else {
+                scaledImg1 = { width: img1.width * scaleFactor, height: img1.height * scaleFactor };
+                scaledImg2 = { width: img2.width, height: img2.height };
+            }
+
+            // Berechnung der Breite und Höhe des Canvas
+            let totalWidth = scaledImg1.width + scaledImg2.width + gap;
+            let maxHeight = Math.max(scaledImg1.height, scaledImg2.height);
+
+            // Skalierung, wenn die Gesamtbreite die maximale Breite überschreitet
+            if (totalWidth > maxCanvasWidth) {
+                const canvasScaleFactor = maxCanvasWidth / totalWidth;
+                scaledImg1.width *= canvasScaleFactor;
+                scaledImg1.height *= canvasScaleFactor;
+                scaledImg2.width *= canvasScaleFactor;
+                scaledImg2.height *= canvasScaleFactor;
+                totalWidth = maxCanvasWidth;
+                maxHeight *= canvasScaleFactor;
+            }
+
+            // Canvas und Kontext vorbereiten
+            const ctx = canvas.getContext('2d');
+
+            // Setze die Breite und Höhe des Canvas
+            canvas.width = totalWidth;
+            canvas.height = maxHeight;
+
+            // Transparenter Hintergrund (keine Füllung)
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Zeichne das erste Bild
+            ctx.drawImage(img1, 0, 0, scaledImg1.width, scaledImg1.height);
+
+            // Zeichne das zweite Bild mit einem Abstand von `gap`
+            ctx.drawImage(img2, scaledImg1.width + gap, 0, scaledImg2.width, scaledImg2.height);
+        }
+
+        function downloadAllImages() {
+            const canvases = document.querySelectorAll('canvas');
+            canvases.forEach((canvas, index) => {
+                const link = document.createElement('a');
+                link.download = `${canvas.getAttribute('data-filename')}.png`;
+
+                // Speichere das Bild als PNG, um Transparenz zu bewahren
+                link.href = canvas.toDataURL('image/png'); // PNG-Format verwenden
+                link.click();
+            });
+        }
+    </script>
+</body>
+
+</html>
